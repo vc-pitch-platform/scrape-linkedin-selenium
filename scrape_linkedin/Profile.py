@@ -108,24 +108,20 @@ class Profile(ResultsObject):
         experiences = dict.fromkeys(
             ['jobs', 'education', 'volunteering'], [])
         try:
-            container = one_or_default(self.soup, '.background-section')
+            # TODO: better crawl this link: https://www.linkedin.com/in/nkaenzig/details/experience/ - should be much easier
+            pvs_header_text = all_or_default(self.soup, '.pvs-header__title')[2].span.text
 
-            jobs = all_or_default(
-                container, '#experience-section ul .pv-position-entity')
-            jobs = list(map(get_job_info, jobs))
-            jobs = flatten_list(jobs)
+            def has_my_text(tag):
+                found = tag.select_one('.pvs-header__title')
+                # important to assign the result to avoid calling
+                # .get_text() on a NoneType, resulting in an error.
+                if found:
+                    return found.span.get_text() == "Experience"
 
-            experiences['jobs'] = jobs
-
-            schools = all_or_default(
-                container, '#education-section .pv-education-entity')
-            schools = list(map(get_school_info, schools))
-            experiences['education'] = schools
-
-            volunteering = all_or_default(
-                container, '.pv-profile-section.volunteering-section .pv-volunteering-entity')
-            volunteering = list(map(get_volunteer_info, volunteering))
-            experiences['volunteering'] = volunteering
+            experience_section = self.soup.find(has_my_text).find_next('div', {'class': 'pvs-list__outer-container'})
+            job_titles = [e.span.get_text() for e in experience_section.find_all('span', {'class': 't-bold'})]
+            experiences['jobs'] = job_titles
+            x = all_or_default(self.soup, '.pvs-header__title')[2].find_next('div', {'class': 'pvs-list__outer-container'})
         except Exception as e:
             logger.exception(
                 "Failed while determining experiences. Results may be missing/incorrect: %s", e)
