@@ -2,6 +2,7 @@ import logging
 from typing import List
 
 from .ProfileResultsObject import ProfileResultsObject
+from .Experience import Experience
 from .utils import *
 
 logger = logging.getLogger(__name__)
@@ -11,7 +12,7 @@ class Profile(ProfileResultsObject):
     """Linkedin User Profile Object"""
 
     attributes = ['personal_info', 'experiences',
-                  'skills', 'accomplishments', 'interests', 'recommendations']
+                  'skills', 'accomplishments', 'interests']
 
     @property
     def personal_info(self):
@@ -105,15 +106,10 @@ class Profile(ProfileResultsObject):
                 - Volunteer Experiences
         """
         logger.info("Trying to determine the 'experiences' property")
-        from collections import defaultdict
-        experiences_dict = defaultdict(list)
-        
-        # dict.fromkeys(
-        #     ['job_titles', 'employers', 'job_descriptions', 'employment_type', 'time_periods'], [])
-        try:
-            # TODO: better crawl this link: https://www.linkedin.com/in/nkaenzig/details/experience/ - should be much easier
-            pvs_header_text = all_or_default(self.main_profile_soup, '.pvs-header__title')[2].span.text
 
+        experience_dicts = []
+        
+        try:
             experience_list = self.experience_soup.select("div.pvs-entity.pvs-entity--padded.pvs-list__item--no-padding-when-nested")
 
             for exp in experience_list:
@@ -121,11 +117,9 @@ class Profile(ProfileResultsObject):
 
                 if len(exp_items) == 1:
                     job_title = exp_items[0].select_one("div div span[class='t-bold mr1 '] span").get_text()
-                    experiences_dict['job_titles'].append(job_title)
 
                     job_description = exp_items[0].select_one("div.pvs-list__outer-container span")
                     job_description = job_description.get_text() if job_description else None
-                    experiences_dict['job_descriptions'].append(job_description)
 
                     employer = exp_items[0].select_one("span[class='t-14 t-normal'] span").get_text()
                     tmp = employer.split(' · ')
@@ -133,20 +127,21 @@ class Profile(ProfileResultsObject):
                     if len(tmp) > 1:
                         employer = tmp[0]
                         employment_type = tmp[1]
-                    experiences_dict['employers'].append(employer)
-                    experiences_dict['job_descriptions'].append(employment_type)
 
-                    time_period = exp_items[0].select_one("span[class='t-14 t-normal t-black--light'] span").get_text()
-                    experiences_dict['time_periods'].append(time_period)
+                    employment_period = exp_items[0].select_one("span[class='t-14 t-normal t-black--light'] span").get_text()
+
+                    experience_obj = Experience(job_title=job_title, employer=employer, job_description=job_description, employment_type=employment_type, employment_period=employment_period)
+                    experience_dicts.append(experience_obj.__dict__)
                 else:
                     # TODO: handle companies with multiple positions`
                     pass
+
 
         except Exception as e:
             logger.exception(
                 "Failed while determining experiences. Results may be missing/incorrect: %s", e)
         finally:
-            return experiences_dict
+            return experience_dicts
 
     @property
     def skills(self):
@@ -217,25 +212,25 @@ class Profile(ProfileResultsObject):
         finally:
             return interests
 
-    @property
-    def recommendations(self):
-        logger.info("Trying to determine the 'recommendations' property")
-        recs = dict.fromkeys(['received', 'given'], [])
-        try:
-            rec_block = one_or_default(
-                self.main_profile_soup, 'section.pv-recommendations-section')
-            received, given = all_or_default(
-                rec_block, 'div.artdeco-tabpanel')
-            for rec_received in all_or_default(received, "li.pv-recommendation-entity"):
-                recs["received"].append(
-                    get_recommendation_details(rec_received))
+    # @property
+    # def recommendations(self):
+    #     logger.info("Trying to determine the 'recommendations' property")
+    #     recs = dict.fromkeys(['received', 'given'], [])
+    #     try:
+    #         rec_block = one_or_default(
+    #             self.main_profile_soup, 'section.pv-recommendations-section')
+    #         received, given = all_or_default(
+    #             rec_block, 'div.artdeco-tabpanel')
+    #         for rec_received in all_or_default(received, "li.pv-recommendation-entity"):
+    #             recs["received"].append(
+    #                 get_recommendation_details(rec_received))
 
-            for rec_given in all_or_default(given, "li.pv-recommendation-entity"):
-                recs["given"].append(get_recommendation_details(rec_given))
-        except Exception as e:
-            logger.exception("Failed to get recommendations: %s", e)
-        finally:
-            return recs
+    #         for rec_given in all_or_default(given, "li.pv-recommendation-entity"):
+    #             recs["given"].append(get_recommendation_details(rec_given))
+    #     except Exception as e:
+    #         logger.exception("Failed to get recommendations: %s", e)
+    #     finally:
+    #         return recs
 
     def to_dict(self):
         logger.info(
