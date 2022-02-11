@@ -21,16 +21,31 @@ class ProfileScraper(Scraper):
     MAIN_SELECTOR = '.scaffold-layout__main'
     ERROR_SELECTOR = '.profile-unavailable'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
     def scrape_by_email(self, email):
         self.load_profile_page(
             'https://www.linkedin.com/sales/gmail/profile/proxy/{}'.format(email))
         return self.get_profile()
 
-    def scrape(self, url='', user=None):
-        self.load_profile_page(url, user)
-        return self.get_profile()
+    def scrape(self, url=None, user=None):
+        profile_page_url = url if url else 'https://www.linkedin.com/in/' + user
 
-    def load_profile_page(self, url='', user=None):
+        # Load main page
+        main_profile_page = self.load_page(url=profile_page_url)
+        contact_info = self.get_contact_info()
+
+        # Load details pages
+        experience_page = self.load_page(url=profile_page_url + '/details/experience' )
+        education_page = self.load_page(url=profile_page_url + '/details/education' )
+        skills_page = self.load_page(url=profile_page_url + '/details/skills' )
+
+        # Parsing html
+        return Profile(main_profile_page+contact_info, experience_page, education_page, skills_page)
+
+
+    def load_page(self, url=''):
         """Load profile page and all async content
 
         Params:
@@ -38,11 +53,6 @@ class ProfileScraper(Scraper):
         Raises:
             ValueError: If link doesn't match a typical profile url
         """
-        if user:
-            url = 'https://www.linkedin.com/in/' + user
-        if 'com/in/' not in url and 'sales/gmail/profile/proxy/' not in url:
-            raise ValueError(
-                "Url must look like... .com/in/NAME or... '.com/sales/gmail/profile/proxy/EMAIL")
 
         logger.debug("Scraping profile for URL %s", url)
 
@@ -73,31 +83,14 @@ class ProfileScraper(Scraper):
                 'Profile Unavailable: Profile link does not match any current Linkedin Profiles')
         # Scroll to the bottom of the page incrementally to load any lazy-loaded content
         self.scroll_to_bottom()
-        self.expand_given_recommendations()
 
-    def expand_given_recommendations(self):
         try:
-            given_recommendation_tab = self.driver.find_element_by_css_selector(
-                'section.pv-recommendations-section button[aria-selected="false"].artdeco-tab')
-            # Scrolls the desired element into view
-            self.driver.execute_script(
-                "arguments[0].scrollIntoView(false);", given_recommendation_tab)
-            given_recommendation_tab.click()
-            self.click_expandable_buttons()
-            # self.scroll_to_bottom()
-        except:
-            pass
-
-    def get_profile(self):
-        try:
-            profile = self.driver.find_element_by_css_selector(
-                self.MAIN_SELECTOR).get_attribute("outerHTML")
+            return self.driver.find_element_by_css_selector(
+                    self.MAIN_SELECTOR).get_attribute("outerHTML")
         except Exception as e:
             logger.exception(
                 "Could not find profile wrapper html. This sometimes happens for exceptionally long profiles.  Try decreasing scroll-increment. The actual error was: %s", e)
             raise e
-        contact_info = self.get_contact_info()
-        return Profile(profile + contact_info)
 
     def get_contact_info(self):
         try:

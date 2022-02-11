@@ -1,7 +1,7 @@
 from scrape_linkedin import ProfileScraper
 from scrape_linkedin.utils import HEADLESS_OPTIONS
 
-LI_AT_COOKIE = "AQEDATnt7VcDMTGTAAABfuSkgSwAAAF_CLEFLE0AJjClBx7Ja8SuUxJvscJWTGrxTYtifohSttPBrH1dblNuj-xxIMycpXkeGq9YRq0COrNCvVqs-npAMIpjSn5JgQRZ94HbfEBqfdYtG18D-cV7iZko"
+LI_AT_COOKIE = "AQEDATnt7VcAtzJ-AAABfulgXNAAAAF_DWzg0E4AvgHCFPvrkW3A85XXQnIu7x7y0Exd62R5ctRsBki0riYVYJuFVx8ERl1s1OPtRY7BA7kayLwpnZLEM8_uD8KYkVdT_wPbO_XFpRCwcHon2Rrvw3Iz"
 
 options = HEADLESS_OPTIONS
 # options = dict()

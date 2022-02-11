@@ -1,13 +1,13 @@
 import logging
 from typing import List
 
-from .ResultsObject import ResultsObject
+from .ProfileResultsObject import ProfileResultsObject
 from .utils import *
 
 logger = logging.getLogger(__name__)
 
 
-class Profile(ResultsObject):
+class Profile(ProfileResultsObject):
     """Linkedin User Profile Object"""
 
     attributes = ['personal_info', 'experiences',
@@ -20,8 +20,8 @@ class Profile(ResultsObject):
         personal_info = dict.fromkeys(['name', 'headline', 'company', 'school', 'location',
                                       'summary', 'image', 'followers', 'email', 'phone', 'connected', 'websites'])
         try:
-            top_card = one_or_default(self.soup, '.pv-top-card')
-            contact_info = one_or_default(self.soup, '.pv-contact-info')
+            top_card = one_or_default(self.main_profile_soup, '.pv-top-card')
+            contact_info = one_or_default(self.main_profile_soup, '.pv-contact-info')
 
             # Note that some of these selectors may have multiple selections, but
             # get_info takes the first match
@@ -34,7 +34,7 @@ class Profile(ResultsObject):
             })}
 
             summary = text_or_default(
-                self.soup, '.pv-about-section', '').replace('... see more', '')
+                self.main_profile_soup, '.pv-about-section', '').replace('... see more', '')
 
             personal_info['summary'] = re.sub(
                 r"^About", "", summary, flags=re.IGNORECASE).strip()
@@ -56,7 +56,7 @@ class Profile(ResultsObject):
 
             personal_info['image'] = image_url
 
-            activity_section = one_or_default(self.soup,
+            activity_section = one_or_default(self.main_profile_soup,
                                               '.pv-recent-activity-section-v2')
 
             followers_text = ''
@@ -105,28 +105,48 @@ class Profile(ResultsObject):
                 - Volunteer Experiences
         """
         logger.info("Trying to determine the 'experiences' property")
-        experiences = dict.fromkeys(
-            ['jobs', 'education', 'volunteering'], [])
+        from collections import defaultdict
+        experiences_dict = defaultdict(list)
+        
+        # dict.fromkeys(
+        #     ['job_titles', 'employers', 'job_descriptions', 'employment_type', 'time_periods'], [])
         try:
             # TODO: better crawl this link: https://www.linkedin.com/in/nkaenzig/details/experience/ - should be much easier
-            pvs_header_text = all_or_default(self.soup, '.pvs-header__title')[2].span.text
+            pvs_header_text = all_or_default(self.main_profile_soup, '.pvs-header__title')[2].span.text
 
-            def has_my_text(tag):
-                found = tag.select_one('.pvs-header__title')
-                # important to assign the result to avoid calling
-                # .get_text() on a NoneType, resulting in an error.
-                if found:
-                    return found.span.get_text() == "Experience"
+            experience_list = self.experience_soup.select("div.pvs-entity.pvs-entity--padded.pvs-list__item--no-padding-when-nested")
 
-            experience_section = self.soup.find(has_my_text).find_next('div', {'class': 'pvs-list__outer-container'})
-            job_titles = [e.span.get_text() for e in experience_section.find_all('span', {'class': 't-bold'})]
-            experiences['jobs'] = job_titles
-            x = all_or_default(self.soup, '.pvs-header__title')[2].find_next('div', {'class': 'pvs-list__outer-container'})
+            for exp in experience_list:
+                exp_items = exp.select('div.display-flex.flex-column.full-width.align-self-center')
+
+                if len(exp_items) == 1:
+                    job_title = exp_items[0].select_one("div div span[class='t-bold mr1 '] span").get_text()
+                    experiences_dict['job_titles'].append(job_title)
+
+                    job_description = exp_items[0].select_one("div.pvs-list__outer-container span")
+                    job_description = job_description.get_text() if job_description else None
+                    experiences_dict['job_descriptions'].append(job_description)
+
+                    employer = exp_items[0].select_one("span[class='t-14 t-normal'] span").get_text()
+                    tmp = employer.split(' · ')
+                    employment_type = None
+                    if len(tmp) > 1:
+                        employer = tmp[0]
+                        employment_type = tmp[1]
+                    experiences_dict['employers'].append(employer)
+                    experiences_dict['job_descriptions'].append(employment_type)
+
+                    time_period = exp_items[0].select_one("span[class='t-14 t-normal t-black--light'] span").get_text()
+                    experiences_dict['time_periods'].append(time_period)
+                else:
+                    # TODO: handle companies with multiple positions`
+                    pass
+
         except Exception as e:
             logger.exception(
                 "Failed while determining experiences. Results may be missing/incorrect: %s", e)
         finally:
-            return experiences
+            return experiences_dict
 
     @property
     def skills(self):
@@ -136,7 +156,7 @@ class Profile(ResultsObject):
             endorsement quantity.
         """
         logger.info("Trying to determine the 'skills' property")
-        skills = self.soup.select('.pv-skill-category-entity__skill-wrapper')
+        skills = self.main_profile_soup.select('.pv-skill-category-entity__skill-wrapper')
         skills = list(map(get_skill_info, skills))
 
         # Sort skills based on endorsements.  If the person has no endorsements
@@ -167,7 +187,7 @@ class Profile(ResultsObject):
         ])
         try:
             container = one_or_default(
-                self.soup, '.pv-accomplishments-section')
+                self.main_profile_soup, '.pv-accomplishments-section')
             for key in accomplishments:
                 accs = all_or_default(
                     container, 'section.' + key + ' ul > li')
@@ -188,7 +208,7 @@ class Profile(ResultsObject):
         logger.info("Trying to determine the 'interests' property")
         interests = []
         try:
-            container = one_or_default(self.soup, '.pv-interests-section')
+            container = one_or_default(self.main_profile_soup, '.pv-interests-section')
             interests = all_or_default(container, 'ul > li')
             interests = list(map(lambda i: text_or_default(
                 i, '.pv-entity__summary-title'), interests))
@@ -203,7 +223,7 @@ class Profile(ResultsObject):
         recs = dict.fromkeys(['received', 'given'], [])
         try:
             rec_block = one_or_default(
-                self.soup, 'section.pv-recommendations-section')
+                self.main_profile_soup, 'section.pv-recommendations-section')
             received, given = all_or_default(
                 rec_block, 'div.artdeco-tabpanel')
             for rec_received in all_or_default(received, "li.pv-recommendation-entity"):
