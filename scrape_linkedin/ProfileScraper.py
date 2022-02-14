@@ -29,23 +29,27 @@ class ProfileScraper(Scraper):
             'https://www.linkedin.com/sales/gmail/profile/proxy/{}'.format(email))
         return self.get_profile()
 
-    def scrape(self, url=None, user=None):
-        profile_page_url = url if url else 'https://www.linkedin.com/in/' + user
+    def scrape(self, user_or_url=None):
+        if 'linkedin.com' in user_or_url:
+            profile_page_url = user_or_url
+        else:
+            profile_page_url =  'https://www.linkedin.com/in/' + user_or_url
 
         # Load main page
-        main_profile_page = self.load_page(url=profile_page_url)
-        contact_info = self.get_contact_info()
+        main_profile_page = self.load_page(url=profile_page_url, scroll=True)
+        # contact_info = self.get_contact_info()
+        contact_info=""
 
         # Load details pages
-        experience_page = self.load_page(url=profile_page_url + '/details/experience' )
-        education_page = self.load_page(url=profile_page_url + '/details/education' )
-        skills_page = self.load_page(url=profile_page_url + '/details/skills' )
+        experience_page = self.load_page(url=profile_page_url + '/details/experience', scroll=False)
+        education_page = self.load_page(url=profile_page_url + '/details/education', scroll=False)
+        skills_page = self.load_page(url=profile_page_url + '/details/skills', scroll=False)
 
         # Parsing html
         return Profile(main_profile_page+contact_info, experience_page, education_page, skills_page)
 
 
-    def load_page(self, url=''):
+    def load_page(self, url: str, scroll: bool):
         """Load profile page and all async content
 
         Params:
@@ -82,7 +86,8 @@ class ProfileScraper(Scraper):
             raise ValueError(
                 'Profile Unavailable: Profile link does not match any current Linkedin Profiles')
         # Scroll to the bottom of the page incrementally to load any lazy-loaded content
-        self.scroll_to_bottom()
+        if scroll:
+            self.scroll_to_bottom()
 
         try:
             return self.driver.find_element_by_css_selector(

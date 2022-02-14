@@ -89,11 +89,11 @@ class Scraper(object):
         current_height = self.driver.execute_script(
             "return document.documentElement.scrollTop")
         while True:
-            self.click_expandable_buttons()
+            # self.click_expandable_buttons()
             # Scroll down to bottom in increments of self.scroll_increment
             new_height = self.driver.execute_script(
                 "return Math.min({}, document.body.scrollHeight)".format(current_height + self.scroll_increment))
-            if (new_height == current_height):
+            if (new_height == current_height) or current_height >= 800:
                 break
             self.driver.execute_script(
                 "window.scrollTo(0, {});".format(new_height))

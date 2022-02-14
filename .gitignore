@@ -7,3 +7,4 @@ README.md.*
 README.md.*
 local_tests/
 *.log
+.env
