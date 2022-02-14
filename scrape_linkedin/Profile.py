@@ -12,7 +12,7 @@ class Profile(ProfileResultsObject):
     """Linkedin User Profile Object"""
 
     attributes = ['personal_info', 'experiences',
-                  'skills', 'accomplishments', 'interests']
+                  'skills']
 
     @property
     def personal_info(self):
@@ -105,6 +105,21 @@ class Profile(ProfileResultsObject):
                 - Education
                 - Volunteer Experiences
         """
+        def extract_experience_properties(exp_item: bs4.element.Tag):
+            job_title = exp_item.select_one("span.t-bold.mr1 span").get_text()
+            job_description = exp_item.select_one("div.pvs-list__outer-container span")
+            job_description = job_description.get_text() if job_description else None
+            employment_period = exp_item.select_one("span[class='t-14 t-normal t-black--light'] span").get_text()
+            tmp = exp_item.select("span[class='t-14 t-normal t-black--light']")
+            if len(tmp) > 1:
+                employment_period = tmp[0].span.get_text()
+                location = tmp[1].span.get_text()
+            else:
+                employment_period = tmp[0].span.get_text()
+                location = ''
+
+            return Experience(employer=None, employment_type=None, job_title=job_title, job_description=job_description, employment_period=employment_period, location=location)
+
         logger.info("Trying to determine the 'experiences' property")
 
         experience_dicts = []
@@ -114,28 +129,25 @@ class Profile(ProfileResultsObject):
 
             for exp in experience_list:
                 exp_items = exp.select('div.display-flex.flex-column.full-width.align-self-center')
+                employment_type = None
+                start_idx = 0
 
                 if len(exp_items) == 1:
-                    job_title = exp_items[0].select_one("div div span[class='t-bold mr1 '] span").get_text()
-
-                    job_description = exp_items[0].select_one("div.pvs-list__outer-container span")
-                    job_description = job_description.get_text() if job_description else None
-
                     employer = exp_items[0].select_one("span[class='t-14 t-normal'] span").get_text()
-                    tmp = employer.split(' · ')
-                    employment_type = None
-                    if len(tmp) > 1:
-                        employer = tmp[0]
-                        employment_type = tmp[1]
-
-                    employment_period = exp_items[0].select_one("span[class='t-14 t-normal t-black--light'] span").get_text()
-
-                    experience_obj = Experience(job_title=job_title, employer=employer, job_description=job_description, employment_type=employment_type, employment_period=employment_period)
-                    experience_dicts.append(experience_obj.__dict__)
                 else:
-                    # TODO: handle companies with multiple positions`
-                    pass
+                    employer = exp_items[0].select_one("span.t-bold.mr1 span").get_text()
+                    start_idx = 1
 
+                tmp = employer.split(' · ')
+                if len(tmp) > 1:
+                    employer = tmp[0]
+                    employment_type = tmp[1]
+
+                for i in range(start_idx, len(exp_items)):
+                    experience_obj = extract_experience_properties(exp_items[i])
+                    experience_obj.employer = employer
+                    experience_obj.employment_type = employment_type
+                    experience_dicts.append(experience_obj.__dict__)
 
         except Exception as e:
             logger.exception(
@@ -150,87 +162,9 @@ class Profile(ProfileResultsObject):
             list of skills {name: str, endorsements: int} in decreasing order of
             endorsement quantity.
         """
-        logger.info("Trying to determine the 'skills' property")
-        skills = self.main_profile_soup.select('.pv-skill-category-entity__skill-wrapper')
-        skills = list(map(get_skill_info, skills))
+        # TODO: hit show more results button
+        return []
 
-        # Sort skills based on endorsements.  If the person has no endorsements
-        def sort_skills(x): return int(
-            x['endorsements'].replace('+', '')) if x['endorsements'] else 0
-        return sorted(skills, key=sort_skills, reverse=True)
-
-    @property
-    def accomplishments(self):
-        """
-        Returns:
-            dict of professional accomplishments including:
-                - publications
-                - cerfifications
-                - patents
-                - courses
-                - projects
-                - honors
-                - test scores
-                - languages
-                - organizations
-        """
-        logger.info("Trying to determine the 'accomplishments' property")
-        accomplishments = dict.fromkeys([
-            'publications', 'certifications', 'patents',
-            'courses', 'projects', 'honors',
-            'test_scores', 'languages', 'organizations'
-        ])
-        try:
-            container = one_or_default(
-                self.main_profile_soup, '.pv-accomplishments-section')
-            for key in accomplishments:
-                accs = all_or_default(
-                    container, 'section.' + key + ' ul > li')
-                accs = map(lambda acc: acc.get_text() if acc else None, accs)
-                accomplishments[key] = list(accs)
-        except Exception as e:
-            logger.exception(
-                "Failed to get accomplishments, results may be incomplete/missing/wrong: %s", e)
-        finally:
-            return accomplishments
-
-    @property
-    def interests(self):
-        """
-        Returns:
-            list of person's interests
-        """
-        logger.info("Trying to determine the 'interests' property")
-        interests = []
-        try:
-            container = one_or_default(self.main_profile_soup, '.pv-interests-section')
-            interests = all_or_default(container, 'ul > li')
-            interests = list(map(lambda i: text_or_default(
-                i, '.pv-entity__summary-title'), interests))
-        except Exception as e:
-            logger.exception("Failed to get interests: %s", e)
-        finally:
-            return interests
-
-    # @property
-    # def recommendations(self):
-    #     logger.info("Trying to determine the 'recommendations' property")
-    #     recs = dict.fromkeys(['received', 'given'], [])
-    #     try:
-    #         rec_block = one_or_default(
-    #             self.main_profile_soup, 'section.pv-recommendations-section')
-    #         received, given = all_or_default(
-    #             rec_block, 'div.artdeco-tabpanel')
-    #         for rec_received in all_or_default(received, "li.pv-recommendation-entity"):
-    #             recs["received"].append(
-    #                 get_recommendation_details(rec_received))
-
-    #         for rec_given in all_or_default(given, "li.pv-recommendation-entity"):
-    #             recs["given"].append(get_recommendation_details(rec_given))
-    #     except Exception as e:
-    #         logger.exception("Failed to get recommendations: %s", e)
-    #     finally:
-    #         return recs
 
     def to_dict(self):
         logger.info(
